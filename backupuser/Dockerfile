@@ -42,5 +42,7 @@ EXPOSE 22
 
 VOLUME ["/data"]
 
-ENTRYPOINT ["/sbin/tini", "--", "/entrypoint.sh"]
+ENTRYPOINT ["/sbin/tini", "--"]
+
+CMD [ "/entrypoint.sh" ]
 
