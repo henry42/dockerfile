@@ -19,4 +19,4 @@ if [ -n "$API_KEY" -a -n "$CROWDSEC_LAPI_URL" ];then
 fi
 
 
-exit 0
+exec "$@"

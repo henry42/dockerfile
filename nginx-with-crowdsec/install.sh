@@ -2,7 +2,7 @@
 
 LUA_MOD_DIR="./lua-mod"
 NGINX_CONF="crowdsec_nginx.conf"
-NGINX_CONF_DIR="/etc/nginx/http.d/"
+NGINX_CONF_DIR="/etc/nginx/conf.d/"
 ACCESS_FILE="access.lua"
 LIB_PATH="/usr/local/lua/crowdsec/"
 CONFIG_PATH="/etc/crowdsec/bouncers/"
@@ -57,7 +57,7 @@ gen_apikey() {
 }
 
 check_nginx_dependency() {
-    DEPENDENCY="gcc musl-dev nginx-mod-http-lua luarocks lua5.1 lua5.1-dev gettext"
+    DEPENDENCY="nginx sed gcc musl-dev nginx-mod-http-lua luarocks lua5.1 lua5.1-dev gettext"
 
     for dep in $DEPENDENCY;
     do
@@ -90,6 +90,8 @@ install() {
     cp nginx/${NGINX_CONF} ${NGINX_CONF_DIR}/${NGINX_CONF}
     cp -r ${LUA_MOD_DIR}/lib/* ${LIB_PATH}/
     cp -r ${LUA_MOD_DIR}/templates/* ${DATA_PATH}/templates/
+
+    sed -i '1i\include "modules/*.conf";' ${NGINX_CONF_DIR}/../nginx.conf
 
     luarocks-5.1 install lua-resty-http  0.17.1-0
     luarocks-5.1 install lua-cjson 2.1.0.10-1
