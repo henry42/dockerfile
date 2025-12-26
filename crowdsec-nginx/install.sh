@@ -2,7 +2,8 @@
 
 LUA_MOD_DIR="./lua-mod"
 NGINX_CONF="crowdsec_nginx.conf"
-NGINX_CONF_DIR="/etc/nginx/conf.d/"
+NGINX_CONF_DIR="/etc/nginx/http.d/"
+NGINX_OLD_CONF_DIR="/etc/nginx/conf.d/"
 ACCESS_FILE="access.lua"
 LIB_PATH="/usr/local/lua/crowdsec/"
 CONFIG_PATH="/etc/crowdsec/bouncers/"
@@ -17,7 +18,6 @@ usage() {
       echo "    ./install.sh -y                 Install the bouncer and accept everything"
       exit 0  
 }
-
 
 #Accept cmdline arguments to overwrite options.
 while [[ $# -gt 0 ]]
@@ -53,7 +53,7 @@ gen_apikey() {
     CROWDSEC_LAPI_URL="http://127.0.0.1:${LAPI_DEFAULT_PORT}"
     mkdir -p "${CONFIG_PATH}"
     API_KEY=${API_KEY} CROWDSEC_LAPI_URL=${CROWDSEC_LAPI_URL} envsubst '$API_KEY $CROWDSEC_LAPI_URL' < ${LUA_MOD_DIR}/config_example.conf | tee -a "${CONFIG_PATH}crowdsec-nginx-bouncer.conf" >/dev/null
-    cp ${LUA_MOD_DIR}/config_example.conf "${CONFIG_PATH}crowdsec-nginx-bouncer.conf.example"
+    cp ${LUA_MOD_DIR}/config_example.conf "${CONFIG_PATH}crowdsec-nginx-bouncer.conf.template"
 }
 
 check_nginx_dependency() {
@@ -64,7 +64,7 @@ check_nginx_dependency() {
         apk info | grep ${dep} > /dev/null
         if [ $? != 0 ]; then
             if [[ "${SILENT}" == "true" ]]; then
-                apk add ${dep} > /dev/null && echo "${dep} successfully installed"
+                apk add --no-cache ${dep} > /dev/null && echo "${dep} successfully installed"
             else
                 echo "${dep} not found, do you want to install it (Y/n)? "
                 read answer
@@ -72,7 +72,7 @@ check_nginx_dependency() {
                     answer="y"
                 fi
                 if [ "$answer" != "${answer#[Yy]}" ] ;then
-                    apk add ${dep} > /dev/null && echo "${dep} successfully installed"
+                    apk add --no-cache ${dep} > /dev/null && echo "${dep} successfully installed"
                 else
                     echo "unable to continue without ${dep}. Exiting" && exit 1
                 fi
@@ -91,16 +91,24 @@ install() {
     cp -r ${LUA_MOD_DIR}/lib/* ${LIB_PATH}/
     cp -r ${LUA_MOD_DIR}/templates/* ${DATA_PATH}/templates/
 
-    sed -i '1i\include "modules/*.conf";' ${NGINX_CONF_DIR}/../nginx.conf
-
     luarocks-5.1 install lua-resty-http  0.17.1-0
     luarocks-5.1 install lua-cjson 2.1.0.10-1
+}
+
+clean_apk() {
+    apk del gcc musl-dev lua5.1-dev && apk cache clean
 }
 
 
 check_nginx_dependency
 gen_apikey
+
+if [ ! -d "$NGINX_CONF_DIR" ];then
+    NGINX_CONF_DIR="$NGINX_OLD_CONF_DIR"
+fi
+
 install
+clean_apk
 
 
 echo "crowdsec-nginx-bouncer installed successfully"

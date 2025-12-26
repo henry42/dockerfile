@@ -1,4 +1,4 @@
-FROM alpine:3.22.2
+FROM alpine:3.23.2
 
 RUN apk add --no-cache openssh rrsync tini shadow
 
@@ -8,18 +8,14 @@ RUN mkdir -p /var/run/sshd && \
     sed -i 's/#LogLevel .*$/LogLevel VERBOSE/' /etc/ssh/sshd_config && \
     sed -i 's/#PrintMotd .*$/PrintMotd no/' /etc/ssh/sshd_config
 
-RUN ssh-keygen -A
-
-RUN adduser -D -s /bin/sh backupuser && usermod -p '*' backupuser
+RUN ssh-keygen -A && adduser -D -s /bin/sh backupuser && usermod -p '*' backupuser
 
 RUN mkdir -p /home/backupuser/.ssh && \
     chown -R backupuser:backupuser /home/backupuser/.ssh && \
     chmod 700 /home/backupuser/.ssh && \
     touch /home/backupuser/.ssh/authorized_keys && chmod 600 /home/backupuser/.ssh/authorized_keys && \
-    chown -R backupuser:backupuser /home/backupuser/.ssh
-
-RUN mkdir -p /data    
-
+    chown -R backupuser:backupuser /home/backupuser/.ssh && \
+    mkdir -p /data    
 
 RUN echo -e "#!/bin/sh \n\
 set -e \n\
@@ -34,9 +30,8 @@ chown backupuser:backupuser /data && chmod 300 /data \n\
 echo \"Service Started. Ready for backup.\" \n\
 exec /usr/sbin/sshd -D -e \n\
 \n\
-"> /entrypoint.sh
+"> /entrypoint.sh && chmod a+x /entrypoint.sh
 
-RUN chmod a+x /entrypoint.sh
 
 EXPOSE 22
 
