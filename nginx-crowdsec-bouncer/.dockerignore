@@ -1,0 +1,6 @@
+# Only include files required to build the image.
+*
+!Dockerfile
+!entrypoint.sh
+!install.sh
+!crowdsec-nginx-bouncer-*.tgz

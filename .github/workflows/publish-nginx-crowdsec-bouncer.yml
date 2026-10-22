@@ -1,0 +1,21 @@
+name: Publish nginx-crowdsec-bouncer
+
+on:
+  push:
+    tags: ['nginx-crowdsec-bouncer-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+jobs:
+  publish:
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      image: nginx-crowdsec-bouncer
+    secrets:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
