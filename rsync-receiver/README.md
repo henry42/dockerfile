@@ -14,7 +14,7 @@ To pin a release, replace `latest` with a published version tag in both the pull
 
 | Environment variable | Default | Description |
 | --- | --- | --- |
-| `SSH_HOST_KEYS_B64` | Required | SSH server host private keys. Provide one complete Base64-encoded private key per line; multiple keys are supported. |
+| `SSH_HOST_KEYS_B64` | Generated automatically | Optional SSH server host private keys. Provide one complete Base64-encoded private key per line; multiple keys are supported. When unset or empty, an Ed25519 host key is generated and its Base64 value is printed in the container logs. |
 | `BACKUP_USERNAME` | `backupuser` | SSH login username. The account is created at startup. |
 | `PUB_KEY` | Required | Authorized client OpenSSH public keys, one per line, without `authorized_keys` options. |
 | `NO_OVERWRITE` | `false` | When `true`, skips files that already exist at the destination. |
@@ -26,35 +26,22 @@ Usernames must be at most 32 characters long and contain only lowercase letters,
 
 ## Run
 
-Generate host private keys for two algorithms on the Docker host once, then reuse the same files when recreating the container. Store these files securely. The private keys must have no passphrase.
+Set `PUB_KEY` to the uploading client's OpenSSH public key. If the Docker host does not have the client's public key at the path below, copy it there or use the correct path.
 
 ```sh
-mkdir -p hostkeys
-chmod 700 hostkeys
-ssh-keygen -t ed25519 -N '' -f hostkeys/ssh_host_ed25519_key
-ssh-keygen -t rsa -b 3072 -N '' -f hostkeys/ssh_host_rsa_key
-
-# Encode each private key as a single line, separating the keys with a newline.
-SSH_HOST_KEYS_B64="$(
-  base64 < hostkeys/ssh_host_ed25519_key | tr -d '\n'
-  printf '\n'
-  base64 < hostkeys/ssh_host_rsa_key | tr -d '\n'
-)"
-export SSH_HOST_KEYS_B64
 PUB_KEY="$(cat "$HOME/.ssh/id_ed25519.pub")"
 export PUB_KEY
 
 docker run -d --name rsync-receiver \
   -p 2222:22 \
   -v backup-data:/data \
-  -e SSH_HOST_KEYS_B64 \
   -e PUB_KEY \
   -e BACKUP_USERNAME=archive \
   -e NO_OVERWRITE=false \
   -e NO_DEL=false \
   henry42/rsync-receiver:latest
 
-unset SSH_HOST_KEYS_B64 PUB_KEY
+unset PUB_KEY
 ```
 
 ## Upload files
@@ -70,6 +57,22 @@ The client must use the private key corresponding to a public key in `PUB_KEY`.
 ## SSH keys
 
 Host private keys identify the server, while `PUB_KEY` contains the client public keys allowed to log in. Keep the same host keys for the lifetime of a service. Multiple host keys can provide different algorithms; SSH negotiates which one to use.
+
+When `SSH_HOST_KEYS_B64` is unset or empty, the container generates an Ed25519 server host key on its first startup and reuses it on subsequent restarts of the same container. After startup validation succeeds, it prints a warning and a reusable value in this format:
+
+```text
+SSH_HOST_KEYS_B64=<base64-encoded-private-host-key>
+```
+
+View it with:
+
+```sh
+docker logs rsync-receiver
+```
+
+This value is a **private server host key**, so keep the logs private and save the value securely. When creating a replacement container, export `SSH_HOST_KEYS_B64` with the saved value (the text after `=`) and add `-e SSH_HOST_KEYS_B64` to the run command above. Reusing it keeps the same SSH host fingerprint; recreating the container without it generates a new identity. The backup volume does not store this key.
+
+You may also supply your own host private keys, without passphrases, using `SSH_HOST_KEYS_B64`. Each line must contain the complete, unwrapped Base64 encoding of one private key. Supplied keys are validated and are not printed in the logs. Invalid supplied keys cause startup to fail instead of generating a replacement.
 
 Invalid keys or configuration cause the container to stop during startup. Base64 is only an encoding; anyone with Docker management access can still inspect the environment variables.
 
