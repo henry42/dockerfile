@@ -51,10 +51,49 @@ docker run -d \
 ```
 
 You can also mount `/etc/crowdsec/bouncers/crowdsec-nginx-bouncer.conf.local` to override
-individual settings; the bouncer gives these values precedence.
+individual settings; the bouncer gives these values precedence. This optional file
+is not included in the image or generated at startup. Create it yourself on the host
+and mount it into the container. If it is absent, the bouncer uses the main configuration.
 
 Mount custom Nginx server or reverse proxy configuration files under `/etc/nginx/http.d/`.
 If you replace `/etc/nginx/nginx.conf`, include that directory inside its `http` block.
+
+## CAPTCHA (optional)
+
+If you do not need CAPTCHA, leave `SITE_KEY` and `SECRET_KEY` empty. The upstream
+library still attempts to initialize CAPTCHA and logs this message at startup:
+
+```text
+error loading captcha plugin: no recaptcha site key provided, can't use recaptcha
+```
+
+This message alone does not stop Nginx from starting or disable normal ban
+remediation. With the default `FALLBACK_REMEDIATION=ban`, CAPTCHA decisions fall
+back to blocking the request.
+
+To enable CAPTCHA, obtain a matching site key and secret key from your CAPTCHA
+provider, then create `crowdsec-nginx-bouncer.conf.local` on the host with the command
+below. Replace the placeholder keys with your own values. These keys are separate
+from your CrowdSec `API_KEY`:
+
+```sh
+cat > crowdsec-nginx-bouncer.conf.local <<'EOF'
+CAPTCHA_PROVIDER=recaptcha
+SITE_KEY=your-captcha-site-key
+SECRET_KEY=your-captcha-secret-key
+EOF
+```
+
+Supported providers are `recaptcha`, `hcaptcha`, and `turnstile`. Configure these
+settings in the file; the image does not read them from environment variables.
+Add this mount to your `docker run` command and recreate the container:
+
+```sh
+-v "$PWD/crowdsec-nginx-bouncer.conf.local:/etc/crowdsec/bouncers/crowdsec-nginx-bouncer.conf.local:ro"
+```
+
+Set both keys together. Leaving either key empty logs a CAPTCHA initialization error.
+See the [upstream documentation](https://docs.crowdsec.net/u/bouncers/nginx/) for more options.
 
 ## Logs
 
