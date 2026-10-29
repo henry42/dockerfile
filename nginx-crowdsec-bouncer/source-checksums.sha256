@@ -1,0 +1,12 @@
+# SHA256 lock for release archives. Bouncer matches its GitHub release asset digest.
+0652b760b3b772d2ec17b47c2fc15d9a95e6fe35cd5b877eadc1a62d9bc75af1  nginx-1.31.8.tar.gz
+123d8203e74bf66f71437c7b3fa070bf8d24e6d332981bc18dc2db43303cc741  lua-nginx-module-0.10.31.tar.gz
+14a28063294f645d457b1eb10e3c23bbba44398f1c5f021421b58b6f8ab31662  ngx_devel_kit-0.3.4.tar.gz
+46ec00b6ba6261890a7d185c48f848e5e6b7a2909fc39ac80f407d1dcbfc74b2  luajit2-2.1-20261023.tar.gz
+f9f14dd61b7d5913ad2959dd4587aff214b7d131fc797d30825fca13d58eeac5  lua-resty-core-6fec23e2149c88b33b39fec8a5ebdd67a3e0dd88.tar.gz
+8cf1a22e0d5b8f35cb0b2e14c58fcb3aa505a8fb6e956817f0cdb1f06593f072  lua-resty-lrucache-0.15.tar.gz
+d84e87bfea7bc1b91c52a27c9464d1412823ce748fd13d3885308f21166f946b  lua-resty-http-0.18.0.tar.gz
+8b3e17e8796f083228b89ddd013bcc688c7d15afcc721c70059fd4a8bf2355dc  lua-resty-string-0.19.tar.gz
+d074ac5e6a2bc9c1bd57786b8d5784b6d13681d2fdc4dd7b215eb20f0bd6189c  lua-resty-openssl-1.9.0.tar.gz
+a99fb872aa731274ac70453cd4e6b2e0e8fb978893063d512ca67c7c332510e1  lua-cjson-2.1.0.20.tar.gz
+8cb0c176f01bda3a5fc5493d20bcd7261630c7dfbd60c00b2bff8eefc8fe84d5  crowdsec-nginx-bouncer-1.2.3.tgz

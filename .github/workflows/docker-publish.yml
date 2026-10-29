@@ -7,6 +7,18 @@ on:
         description: Image name and build-context directory
         required: true
         type: string
+      version_tag:
+        description: Immutable component-version tag, when provided by the caller
+        type: string
+        default: ''
+      build_args:
+        description: Explicit, non-secret build arguments
+        type: string
+        default: ''
+      verify:
+        description: Run the Nginx bouncer integration verification before publishing
+        type: boolean
+        default: false
     secrets:
       DOCKERHUB_TOKEN:
         required: false
@@ -24,10 +36,29 @@ jobs:
     steps:
       - name: Check manual publishing target
         if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION_TAG: ${{ inputs.version_tag }}
         shell: bash
         run: |
-          if [[ "$GITHUB_REF" != refs/heads/main && "$GITHUB_REF" != refs/tags/"${IMAGE_NAME}-v"* ]]; then
-            echo '::error::Select main or a version tag for this image when running the workflow manually.'
+          if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            exit 0
+          fi
+          if [[ -n "$VERSION_TAG" ]]; then
+            if [[ "$GITHUB_REF" == "refs/tags/$VERSION_TAG" ]]; then exit 0; fi
+          elif [[ "$GITHUB_REF" == refs/tags/"${IMAGE_NAME}-v"* ]]; then
+            exit 0
+          fi
+          echo '::error::Select main or a matching release tag for this image when running the workflow manually.'
+          exit 1
+
+      - name: Validate component release tag
+        if: github.ref_type == 'tag' && inputs.version_tag != ''
+        env:
+          VERSION_TAG: ${{ inputs.version_tag }}
+        shell: bash
+        run: |
+          if [[ ! "$VERSION_TAG" =~ ^nginx[0-9]+\.[0-9]+\.[0-9]+-alpine[0-9]+\.[0-9]+-bouncer[0-9]+\.[0-9]+\.[0-9]+$ || "$GITHUB_REF_NAME" != "$VERSION_TAG" ]]; then
+            echo '::error::The Git tag, component versions and Docker image tag must match exactly.'
             exit 1
           fi
 
@@ -57,13 +88,14 @@ jobs:
           images: ${{ vars.DOCKERHUB_NAMESPACE || vars.DOCKERHUB_USERNAME || github.repository_owner }}/${{ inputs.image }}
           flavor: latest=auto
           tags: |
-            type=semver,pattern={{version}},match=^${{ inputs.image }}-v(.*)$
+            type=semver,pattern={{version}},match=^${{ inputs.image }}-v(.*)$,enable=${{ inputs.version_tag == '' }}
             type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
             type=ref,event=pr
             type=sha
+            type=raw,value=${{ inputs.version_tag || 'unused-component-version' }},enable=${{ inputs.version_tag != '' }},priority=1000
 
       - name: Validate release version
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' && inputs.version_tag == ''
         shell: bash
         env:
           IMAGE_VERSION: ${{ steps.meta.outputs.version }}
@@ -89,6 +121,42 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Protect immutable component-version tag
+        if: github.event_name != 'pull_request' && inputs.version_tag != ''
+        env:
+          IMAGE_REPOSITORY: ${{ vars.DOCKERHUB_NAMESPACE || vars.DOCKERHUB_USERNAME || github.repository_owner }}/${{ inputs.image }}
+          VERSION_TAG: ${{ inputs.version_tag }}
+        shell: bash
+        run: |
+          if docker buildx imagetools inspect "$IMAGE_REPOSITORY:$VERSION_TAG" >manifest-check.log 2>&1; then
+            echo "::error::Immutable tag $IMAGE_REPOSITORY:$VERSION_TAG already exists; it will not be overwritten."
+            exit 1
+          elif ! grep -Eqi 'not found|manifest unknown|404' manifest-check.log; then
+            cat manifest-check.log
+            exit 1
+          fi
+
+      - name: Build local Nginx verification image
+        if: inputs.verify
+        uses: docker/build-push-action@v7
+        with:
+          context: ./${{ inputs.image }}
+          file: ./${{ inputs.image }}/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          pull: true
+          tags: nginx-crowdsec-verification:${{ github.sha }}
+          build-args: ${{ inputs.build_args }}
+          cache-from: type=gha,scope=${{ inputs.image }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.image }}
+
+      - name: Verify modules, runtime configuration, LAPI and AppSec fail-open
+        if: inputs.verify
+        env:
+          VERIFY_IMAGE: nginx-crowdsec-verification:${{ github.sha }}
+        run: python3 nginx-crowdsec-bouncer/verify.py "$VERIFY_IMAGE"
+
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
@@ -99,5 +167,6 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ inputs.build_args }}
           cache-from: type=gha,scope=${{ inputs.image }}
           cache-to: type=gha,mode=max,scope=${{ inputs.image }}

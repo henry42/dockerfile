@@ -1,1 +1,48 @@
+# Operating system files.
 .DS_Store
+
+# Runtime environment files; keep reusable examples visible.
+.env
+.env.*
+*.env
+!.env.example
+!.env.sample
+!.env.template
+
+# Private keys and keystores.
+*.key
+*.pem
+*.p8
+*.p12
+*.pfx
+*.ppk
+*.jks
+*.keystore
+id_rsa
+id_rsa.*
+id_dsa
+id_dsa.*
+id_ecdsa
+id_ecdsa.*
+id_ed25519
+id_ed25519.*
+ssh_host_*_key
+ssh_host_*_key.pub
+host_key_*
+hostkeys/
+.ssh/
+
+# Local credentials and secret directories.
+secrets/
+.secrets/
+.aws/
+.docker/
+.netrc
+.npmrc
+.pypirc
+credentials.json
+service-account*.json
+
+# Local CrowdSec configuration may contain API or CAPTCHA keys.
+crowdsec-nginx-bouncer.conf
+crowdsec-nginx-bouncer.conf.local

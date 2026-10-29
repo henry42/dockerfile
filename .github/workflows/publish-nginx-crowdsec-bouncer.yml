@@ -2,20 +2,68 @@ name: Publish nginx-crowdsec-bouncer
 
 on:
   push:
-    tags: ['nginx-crowdsec-bouncer-v*']
+    tags: ['nginx*-alpine*-bouncer*']
+  pull_request:
+    paths:
+      - 'nginx-crowdsec-bouncer/**'
+      - '.github/workflows/publish-nginx-crowdsec-bouncer.yml'
+      - '.github/workflows/docker-publish.yml'
   workflow_dispatch:
+    inputs:
+      nginx_version:
+        description: 'Nginx release (blank uses Dockerfile default)'
+        type: string
+      alpine_version:
+        description: 'Alpine series from the official image tag (blank uses Dockerfile default)'
+        type: string
+      bouncer_version:
+        description: 'CrowdSec stable release without v (blank uses Dockerfile default)'
+        type: string
+      nginx_image_digest:
+        description: 'Matching official manifest sha256 digest (required when changing Nginx/Alpine)'
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+  # Serialize publishes of the immutable version combination across all refs.
+  group: publish-nginx-crowdsec-bouncer
+  cancel-in-progress: false
 
 jobs:
+  versions:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.versions.outputs.tag }}
+      build_args: ${{ steps.versions.outputs.build_args }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Resolve pinned versions from Git tag or Dockerfile defaults
+        id: versions
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          INPUT_NGINX: ${{ inputs.nginx_version }}
+          INPUT_ALPINE: ${{ inputs.alpine_version }}
+          INPUT_BOUNCER: ${{ inputs.bouncer_version }}
+          INPUT_DIGEST: ${{ inputs.nginx_image_digest }}
+        run: |
+          python3 nginx-crowdsec-bouncer/version-info.py \
+            --tag "$RELEASE_TAG" \
+            --nginx-version "$INPUT_NGINX" \
+            --alpine-version "$INPUT_ALPINE" \
+            --bouncer-version "$INPUT_BOUNCER" \
+            --nginx-image-digest "$INPUT_DIGEST" \
+            --github-output "$GITHUB_OUTPUT"
   publish:
+    needs: versions
     uses: ./.github/workflows/docker-publish.yml
     with:
       image: nginx-crowdsec-bouncer
+      version_tag: ${{ needs.versions.outputs.tag }}
+      build_args: ${{ needs.versions.outputs.build_args }}
+      verify: true
     secrets:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

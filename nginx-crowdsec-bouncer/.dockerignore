@@ -3,4 +3,5 @@
 !Dockerfile
 !entrypoint.sh
 !install.sh
+!source-checksums.sha256
 !crowdsec-nginx-bouncer-*.tgz
