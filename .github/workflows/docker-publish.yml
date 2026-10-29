@@ -7,6 +7,10 @@ on:
         description: Image name and build-context directory
         required: true
         type: string
+      nginx_component_tag:
+        description: Publish a second tag using actual Nginx, Alpine and bouncer versions
+        type: boolean
+        default: false
     secrets:
       DOCKERHUB_TOKEN:
         required: false
@@ -21,7 +25,14 @@ jobs:
     timeout-minutes: 45
     env:
       IMAGE_NAME: ${{ inputs.image }}
+      IMAGE_REPOSITORY: ${{ vars.DOCKERHUB_NAMESPACE || vars.DOCKERHUB_USERNAME || github.repository_owner }}/${{ inputs.image }}
     steps:
+      - name: Check component-tag target
+        if: inputs.nginx_component_tag && inputs.image != 'nginx-crowdsec-bouncer'
+        run: |
+          echo '::error::Component version tags are only supported for nginx-crowdsec-bouncer.'
+          exit 1
+
       - name: Check manual publishing target
         if: github.event_name == 'workflow_dispatch'
         shell: bash
@@ -55,12 +66,12 @@ jobs:
           DOCKER_METADATA_SHORT_SHA_LENGTH: 12
         with:
           images: ${{ vars.DOCKERHUB_NAMESPACE || vars.DOCKERHUB_USERNAME || github.repository_owner }}/${{ inputs.image }}
-          flavor: latest=auto
+          flavor: latest=${{ inputs.nginx_component_tag && 'false' || 'auto' }}
           tags: |
             type=semver,pattern={{version}},match=^${{ inputs.image }}-v(.*)$
             type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
             type=ref,event=pr
-            type=sha
+            type=sha,enable=${{ !inputs.nginx_component_tag }}
 
       - name: Validate release version
         if: github.ref_type == 'tag'
@@ -90,14 +101,43 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: ./${{ inputs.image }}
           file: ./${{ inputs.image }}/Dockerfile
           platforms: linux/amd64,linux/arm64
           pull: true
+          no-cache: ${{ inputs.nginx_component_tag }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ inputs.image }}
           cache-to: type=gha,mode=max,scope=${{ inputs.image }}
+
+      - name: Read actual Nginx component versions on both architectures
+        if: inputs.nginx_component_tag && github.event_name != 'pull_request'
+        id: components
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          python3 nginx-crowdsec-bouncer/image-versions.py \
+            "$IMAGE_REPOSITORY@$IMAGE_DIGEST" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Publish component tag for the same image
+        if: inputs.nginx_component_tag && github.event_name != 'pull_request'
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          COMPONENT_TAG: ${{ steps.components.outputs.tag }}
+          RELEASE_IMAGE: ${{ steps.meta.outputs.tags }}
+        run: |
+          docker buildx imagetools create \
+            --tag "$IMAGE_REPOSITORY:$COMPONENT_TAG" \
+            "$IMAGE_REPOSITORY@$IMAGE_DIGEST"
+          {
+            printf '### Published Nginx CrowdSec image\n\n'
+            printf -- '- Release: `%s`\n' "$RELEASE_IMAGE"
+            printf -- '- Components: `%s:%s`\n' "$IMAGE_REPOSITORY" "$COMPONENT_TAG"
+            printf -- '- Digest: `%s`\n' "$IMAGE_DIGEST"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -17,5 +17,6 @@ jobs:
     uses: ./.github/workflows/docker-publish.yml
     with:
       image: nginx-crowdsec-bouncer
+      nginx_component_tag: true
     secrets:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

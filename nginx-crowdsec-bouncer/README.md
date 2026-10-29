@@ -9,7 +9,7 @@ Modified for use with Alpine Linux and Docker.
 ## Quick start
 
 ```sh
-docker pull henry42/nginx-crowdsec-bouncer
+docker pull henry42/nginx-crowdsec-bouncer:1.2.3
 ```
 
 You need a running CrowdSec Local API (LAPI) and a bouncer API key registered with it.
@@ -21,7 +21,7 @@ docker run -d \
   -p 8080:80 \
   -e API_KEY='your-bouncer-api-key' \
   -e CROWDSEC_LAPI_URL='http://YOUR_CROWDSEC_HOST:8080' \
-  henry42/nginx-crowdsec-bouncer
+  henry42/nginx-crowdsec-bouncer:1.2.3
 ```
 
 ## Environment variables
@@ -47,7 +47,7 @@ docker run -d \
   --name nginx-crowdsec-bouncer \
   -p 8080:80 \
   -v "$PWD/crowdsec-nginx-bouncer.conf:/etc/crowdsec/bouncers/crowdsec-nginx-bouncer.conf:ro" \
-  henry42/nginx-crowdsec-bouncer
+  henry42/nginx-crowdsec-bouncer:1.2.3
 ```
 
 You can also mount `/etc/crowdsec/bouncers/crowdsec-nginx-bouncer.conf.local` to override
@@ -102,3 +102,30 @@ By default, access logs go to standard output and error logs go to standard erro
 ```sh
 docker logs -f nginx-crowdsec-bouncer
 ```
+
+## Image tags
+
+Replace `1.2.3` in the examples with the desired image release. The image release
+version is independent of the upstream bouncer version.
+
+The existing `nginx-crowdsec-bouncer-vX.Y.Z` Git tag trigger is unchanged. Each
+release publishes two Docker tags pointing to the same multi-platform image:
+
+- The image release, such as `1.2.3`.
+- `nginx<apk-version>-alpine<release>-bouncer<version>`, generated automatically
+  from the built image. The Nginx APK version includes its `-rN` package revision.
+
+CI reads the installed Nginx package version, `/etc/alpine-release` and the bouncer
+version in its installed Nginx configuration on both amd64 and arm64. The versions
+must match before the component tag is published. The actual values, complete tag
+and image digest are shown in the workflow logs and job summary.
+
+Manual builds on `main` publish `edge` plus the component tag; manual builds on a
+release Git tag publish that release plus the component tag. This image no longer
+adds `latest` or `sha-*` tags. Other images retain their existing tag policies.
+
+CI rebuilds this image without layer cache so Alpine package updates are picked up
+even when the Dockerfile is unchanged. The component tag may move to a newer build
+when Lua or another dependency changes without changing the three named components.
+Use an image digest (`henry42/nginx-crowdsec-bouncer@sha256:...`) to pin the exact
+contents of a particular build.
