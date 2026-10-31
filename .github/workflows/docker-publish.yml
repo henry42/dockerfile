@@ -108,12 +108,30 @@ jobs:
           file: ./${{ inputs.image }}/Dockerfile
           platforms: linux/amd64,linux/arm64
           pull: true
-          no-cache: ${{ inputs.nginx_component_tag }}
+          # Refresh APK packages on every build, even when the Dockerfile is unchanged.
+          no-cache: true
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ inputs.image }}
-          cache-to: type=gha,mode=max,scope=${{ inputs.image }}
+
+      - name: Record actual rsync component versions on both architectures
+        if: (inputs.image == 'rsync-receiver' || inputs.image == 'rsync-source') && github.event_name != 'pull_request'
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          {
+            printf '### Rsync image components\n\n'
+            printf 'Image: `%s@%s`\n\n' "$IMAGE_REPOSITORY" "$IMAGE_DIGEST"
+            for platform in linux/amd64 linux/arm64; do
+              printf '#### %s\n\n```text\n' "$platform"
+              docker run --rm --pull=always --platform "$platform" \
+                --entrypoint /bin/sh "$IMAGE_REPOSITORY@$IMAGE_DIGEST" -ec '
+                  printf "Alpine: %s\n" "$(cat /etc/alpine-release)"
+                  apk info -v rsync rrsync openssh-server
+                '
+              printf '```\n\n'
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Read actual Nginx component versions on both architectures
         if: inputs.nginx_component_tag && github.event_name != 'pull_request'
