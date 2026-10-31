@@ -84,4 +84,42 @@ At startup, the top-level `/data` directory is assigned to the login account and
 
 `NO_OVERWRITE=true` works well when each upload uses a separate dated directory: files already present at the same path are skipped. `NO_DEL=true` restricts rrsync options; it does not provide immutable storage. Use snapshots or other storage policies when historical versions need protection.
 
-References: [OpenSSH host private keys](https://man.openbsd.org/sshd#h), [rrsync options](https://download.samba.org/pub/rsync/rrsync.1.html).
+## SSH logs and CrowdSec
+
+OpenSSH runs with `LogLevel VERBOSE` and `sshd -D -e`. Connection, authentication, and disconnect events are written to stderr and collected by Docker. View them on the Docker host:
+
+```sh
+docker logs --tail 100 -f rsync-receiver
+```
+
+These events are not automatically written to the host's `/var/log/auth.log`. Their retention follows the container's Docker logging configuration.
+
+CrowdSec running on the host can read the container logs through the Docker API. It needs access to the Docker socket, which defaults to `/var/run/docker.sock`. Save the following acquisition configuration as `/etc/crowdsec/acquis.d/rsync.yaml` on that host:
+
+```yaml
+source: docker
+container_name:
+  - rsync-receiver
+follow_stdout: false
+follow_stderr: true
+labels:
+  type: sshd
+```
+
+Use your actual container name. To monitor both images, list both container names under `container_name` in the same acquisition configuration and avoid configuring the same container twice.
+
+The `sshd` label identifies raw SSH log messages rather than host syslog records. Only stderr is collected: startup messages, including any automatically generated private host key printed to stdout, are excluded from this acquisition.
+
+Install the SSH collection and raw log parser, then restart CrowdSec. On a host using systemd:
+
+```sh
+sudo cscli collections install crowdsecurity/sshd
+sudo cscli parsers install crowdsecurity/syslog-logs
+sudo systemctl restart crowdsec
+```
+
+The `syslog-logs` package also includes the non-syslog parser used for raw `sshd` messages. After making an SSH connection attempt, run `sudo cscli metrics` to check the acquisition and parser counters.
+
+Detection and blocking are configured separately. To block SSH connections, use a host firewall bouncer; an Nginx bouncer protects HTTP traffic. With Docker's iptables backend, configure the firewall bouncer to cover `DOCKER-USER` as well as host traffic. See [CrowdSec Docker acquisition](https://docs.crowdsec.net/docs/log_processor/data_sources/docker/) and [firewall bouncer configuration](https://docs.crowdsec.net/u/bouncers/firewall/#iptables_chains).
+
+References: [OpenSSH logging](https://man.openbsd.org/sshd#e), [OpenSSH host private keys](https://man.openbsd.org/sshd#h), [rrsync options](https://download.samba.org/pub/rsync/rrsync.1.html).

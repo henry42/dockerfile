@@ -1,0 +1,5 @@
+# Only include files required to build the image.
+*
+!Dockerfile
+!entrypoint.sh
+!source-command.py

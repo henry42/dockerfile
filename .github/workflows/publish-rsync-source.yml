@@ -1,0 +1,21 @@
+name: Publish rsync-source
+
+on:
+  push:
+    tags: ['rsync-source-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+jobs:
+  publish:
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      image: rsync-source
+    secrets:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
