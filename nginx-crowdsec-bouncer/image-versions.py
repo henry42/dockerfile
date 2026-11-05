@@ -51,14 +51,15 @@ def read_versions(image, platform):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("image", help="Docker Hub repository@sha256:digest returned by the build")
+    parser.add_argument("amd64_image", help="Docker Hub repository@sha256:digest for the amd64 manifest")
+    parser.add_argument("arm64_image", help="Docker Hub repository@sha256:digest for the arm64 manifest")
     parser.add_argument("--github-output", type=Path)
     args = parser.parse_args()
-    if not re.search(r"@sha256:[0-9a-f]{64}$", args.image):
-        parser.error("Inspect the immutable build digest, not a mutable image tag")
+    if not all(re.search(r"@sha256:[0-9a-f]{64}$", image) for image in (args.amd64_image, args.arm64_image)):
+        parser.error("Provide both platform images by digest")
     try:
-        versions = read_versions(args.image, "linux/amd64")
-        if read_versions(args.image, "linux/arm64") != versions:
+        versions = read_versions(args.amd64_image, "linux/amd64")
+        if read_versions(args.arm64_image, "linux/arm64") != versions:
             raise ValueError("amd64 and arm64 component versions differ; refusing to publish a misleading tag")
     except (ValueError, subprocess.CalledProcessError) as error:
         print(str(error), file=sys.stderr)

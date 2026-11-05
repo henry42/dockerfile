@@ -114,20 +114,41 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      - name: Record actual rsync component versions on both architectures
-        if: (inputs.image == 'rsync-receiver' || inputs.image == 'rsync-source') && github.event_name != 'pull_request'
+      - name: Resolve the published image for each architecture
+        if: github.event_name != 'pull_request' && (inputs.nginx_component_tag || inputs.image == 'rsync-receiver' || inputs.image == 'rsync-source')
+        id: platform_images
+        shell: bash
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          # Docker's classic image store cannot use the same index digest for both platforms.
+          manifest=$(docker buildx imagetools inspect --raw "$IMAGE_REPOSITORY@$IMAGE_DIGEST")
+          for arch in amd64 arm64; do
+            digest=$(jq -er --arg arch "$arch" '
+              [.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch)]
+              | if length == 1 then .[0].digest else error("Expected exactly one linux/\($arch) manifest") end
+            ' <<< "$manifest")
+            printf '%s=%s@%s\n' "$arch" "$IMAGE_REPOSITORY" "$digest" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Record actual rsync component versions on both architectures
+        if: (inputs.image == 'rsync-receiver' || inputs.image == 'rsync-source') && github.event_name != 'pull_request'
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          AMD64_IMAGE: ${{ steps.platform_images.outputs.amd64 }}
+          ARM64_IMAGE: ${{ steps.platform_images.outputs.arm64 }}
         run: |
           {
             printf '### Rsync image components\n\n'
             printf 'Image: `%s@%s`\n\n' "$IMAGE_REPOSITORY" "$IMAGE_DIGEST"
-            for platform in linux/amd64 linux/arm64; do
+            for platform_image in "linux/amd64 $AMD64_IMAGE" "linux/arm64 $ARM64_IMAGE"; do
+              read -r platform image <<< "$platform_image"
               printf '#### %s\n\n```text\n' "$platform"
               docker run --rm --pull=always --platform "$platform" \
-                --entrypoint /bin/sh "$IMAGE_REPOSITORY@$IMAGE_DIGEST" -ec '
+                --entrypoint /bin/sh "$image" -ec '
                   printf "Alpine: %s\n" "$(cat /etc/alpine-release)"
-                  apk info -v rsync rrsync openssh-server
+                  apk list --installed rsync rrsync openssh-server
                 '
               printf '```\n\n'
             done
@@ -137,10 +158,11 @@ jobs:
         if: inputs.nginx_component_tag && github.event_name != 'pull_request'
         id: components
         env:
-          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          AMD64_IMAGE: ${{ steps.platform_images.outputs.amd64 }}
+          ARM64_IMAGE: ${{ steps.platform_images.outputs.arm64 }}
         run: |
           python3 nginx-crowdsec-bouncer/image-versions.py \
-            "$IMAGE_REPOSITORY@$IMAGE_DIGEST" \
+            "$AMD64_IMAGE" "$ARM64_IMAGE" \
             --github-output "$GITHUB_OUTPUT"
 
       - name: Publish component tag for the same image
