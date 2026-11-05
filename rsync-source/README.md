@@ -19,6 +19,7 @@ To pin a release, replace `latest` with a published version tag in both the pull
 | `PUID` | `1000` | UID of the login account. Match a host UID that can read the source files. Must be between `1000` and `2147483647`. |
 | `PGID` | `1000` | Primary GID of the login account. Match a host group that can access the source files. Must be between `1` and `2147483647`. |
 | `PUB_KEY` | Required | Authorized client OpenSSH public keys, one per line, without `authorized_keys` options. |
+| `ALLOWED_IPS` | Empty (any source IP) | Optional source IP allowlist applied to every client public key. Accepts IPv4/IPv6 addresses and CIDR networks separated by commas or whitespace. Invalid entries cause startup to fail. |
 | `ALLOW_SOURCE_DELETE` | `false` | When `true`, permits clients to request removal of successfully copied source files using `--remove-source-files`. It does not delete files automatically or permit uploads. |
 
 `ALLOW_SOURCE_DELETE` accepts only lowercase `true` or `false`. UID and GID values must be decimal integers without leading zeros. Invalid configuration causes startup to fail.
@@ -46,6 +47,25 @@ unset PUB_KEY
 ```
 
 The container does not change the ownership or permissions of `/data` or its contents. The login account needs read permission on files and read/search permission on directories it will traverse. Supplementary host group memberships are not inherited; use `PGID` or grant the required permissions on the host.
+
+## Restrict client IP addresses
+
+Set `ALLOWED_IPS` when creating the container to allow public-key authentication only from specific source addresses. For example, add this option to the run command:
+
+```sh
+-e ALLOWED_IPS='203.0.113.10,198.51.100.0/24,2001:db8::/64'
+```
+
+In Docker Compose, configure the same value under the service:
+
+```yaml
+environment:
+  ALLOWED_IPS: "203.0.113.10,198.51.100.0/24,2001:db8::/64"
+```
+
+The list applies to all keys in `PUB_KEY`. Addresses separated by spaces or newlines are also accepted. CIDR entries are normalized to their network address. An unset or empty value allows authentication from any source IP, subject to the configured client keys.
+
+OpenSSH enforces the allowlist using the `from` option on authorized keys. It checks the source IP visible inside the container. For clients behind NAT or a VPN, allow their egress address as seen in the SSH logs. Connections from other addresses can reach the SSH listener but fail public-key authentication. See [OpenSSH source address restrictions](https://man.openbsd.org/sshd#from="pattern-list").
 
 ## Download files
 

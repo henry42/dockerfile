@@ -12,6 +12,36 @@ PUID=${PUID-1000}
 PGID=${PGID-1000}
 ALLOW_SOURCE_DELETE=${ALLOW_SOURCE_DELETE-false}
 
+allowed_ips=$(python3 - <<'PY'
+import ipaddress
+import os
+import re
+import sys
+
+value = os.environ.get("ALLOWED_IPS", "")
+if not value:
+    sys.exit(0)
+
+try:
+    entries = re.split(r"[\s,]+", value.strip(" \t\r\n,"))
+    addresses = []
+    for entry in entries:
+        if not re.fullmatch(r"[0-9a-fA-F:./]+", entry):
+            raise ValueError()
+        address = ipaddress.ip_network(entry, strict=False) if "/" in entry else ipaddress.ip_address(entry)
+        addresses.append(str(address))
+except ValueError:
+    sys.exit("ALLOWED_IPS must contain IPv4/IPv6 addresses or CIDR networks separated by commas or whitespace.")
+
+print(",".join(dict.fromkeys(addresses)))
+PY
+) || fail 'Invalid ALLOWED_IPS.'
+
+key_options=restrict
+if [ -n "$allowed_ips" ]; then
+    key_options="$key_options,from=\"$allowed_ips\""
+fi
+
 case "$BACKUP_USERNAME" in
     ''|[!a-z_]*|*[!a-z0-9_-]*)
         fail 'BACKUP_USERNAME must start with a lowercase letter or underscore and contain only lowercase letters, digits, underscores or hyphens.'
@@ -105,7 +135,7 @@ while IFS= read -r public_key || [ -n "$public_key" ]; do
     esac
     printf '%s\n' "$public_key" > "$runtime_dir/public_key"
     ssh-keygen -l -f "$runtime_dir/public_key" > /dev/null 2>&1 || fail 'PUB_KEY contains an invalid public key.'
-    printf 'restrict %s\n' "$public_key" >> "$runtime_dir/authorized_keys"
+    printf '%s %s\n' "$key_options" "$public_key" >> "$runtime_dir/authorized_keys"
     public_key_count=$((public_key_count + 1))
 done < "$runtime_dir/public_keys"
 rm -f "$runtime_dir/public_key" "$runtime_dir/public_keys"

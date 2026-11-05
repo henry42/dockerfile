@@ -5,7 +5,8 @@ RUN apk add --no-cache openssh rrsync tini shadow
 ENV BACKUP_USERNAME=backupuser \
     PUID=1000 \
     PGID=1000 \
-    ALLOW_SOURCE_DELETE=false
+    ALLOW_SOURCE_DELETE=false \
+    ALLOWED_IPS=""
 
 COPY entrypoint.sh /entrypoint.sh
 COPY source-command.py /usr/local/bin/rsync-source-command
