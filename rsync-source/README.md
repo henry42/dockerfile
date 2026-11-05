@@ -110,6 +110,31 @@ You may instead supply your own unencrypted host private keys. Each line must co
 
 Base64 is only an encoding. Anyone with Docker management access can inspect container environment variables.
 
+### Generate a client `known_hosts` entry
+
+On the server, use the saved `SSH_HOST_KEYS_B64` value to generate a public entry for the client. This example uses one key and the address `backup.example.com:2222`. Replace the host and port with the address the client actually connects to. For port 22, use `backup.example.com` without brackets or a port.
+
+```sh
+(
+  umask 077
+  key_file=$(mktemp) || exit 1
+  trap 'rm -f "$key_file"' EXIT
+
+  printf '%s' "$SSH_HOST_KEYS_B64" | base64 -d > "$key_file" &&
+    host_pub=$(ssh-keygen -y -f "$key_file") &&
+    printf '[backup.example.com]:2222 %s\n' "$host_pub"
+)
+```
+
+If `SSH_HOST_KEYS_B64` contains multiple keys, run this once per line with that line as the variable value. The temporary file lets OpenSSH check private key permissions. Piping the decoded key to `ssh-keygen -y -f /dev/stdin` can fail with `bad permissions` on macOS. See the [OpenSSH private key permission check](https://github.com/openssh/openssh-portable/blob/master/authfile.c).
+
+Send the resulting public line to the client over a trusted channel and keep `SSH_HOST_KEYS_B64` on the server. Append the line to `~/.ssh/known_hosts` under the account that runs rsync. The client can then require a matching host key:
+
+```sh
+rsync -av -e 'ssh -p 2222 -o StrictHostKeyChecking=yes' \
+  backupuser@backup.example.com:. ./backup/
+```
+
 ## SSH logs and CrowdSec
 
 OpenSSH runs with `LogLevel VERBOSE` and `sshd -D -e`. Connection, authentication, and disconnect events are written to stderr and collected by Docker. View them on the Docker host:
