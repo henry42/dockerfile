@@ -1,4 +1,4 @@
-FROM alpine:3.24.3
+FROM alpine:3.24.4
 
 ADD crowdsec-nginx-bouncer-v1.2.3.tgz /tmp/
 
